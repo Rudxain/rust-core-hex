@@ -1,5 +1,8 @@
 #![no_std]
 
+#[cfg(not(debug_assertions))]
+use core::hint::assert_unchecked;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Case {
 	Lower,
@@ -79,14 +82,31 @@ pub const fn encode_slice<'i, 'o>(src: &'i [u8], dest: &'o mut [u8], c: Case) ->
 	// from this point, there should be no bounds-checks
 	// on indexing
 	let mut i = 0;
+	// assert same-type
+	let _ = [i, src.len(), dest.len()];
 	while i < src.len() {
-		// never overflow
-		let i2 = i + i;
+		// SAFETY: `i < src.len() <= dest.len() / 2`,
+		// all are `usize`,
+		// therefore `i * 2` cannot overflow
+		#[cfg(not(debug_assertions))]
+		let i2 = unsafe { i.unchecked_add(i) };
+		#[cfg(debug_assertions)]
+		let Some(i2) = i.checked_add(i) else {
+			unreachable!()
+		};
 		let [h0, h1] = from_byte(src[i], c);
 		// err: `(&mut dest[i2..=(i2 | 1)]) = from_byte(src[i]);`
 		// not `const`: `dest[i2..=(i2 | 1)].copy_from_slice(&from_byte(src[i]));`
 		dest[i2] = h0;
-		dest[i2 | 1] = h1;
+		// SAFETY: `i2` is even, so `i2 | 1 == i2 + 1`
+		#[cfg(not(debug_assertions))]
+		unsafe {
+			assert_unchecked(i2 | 1 == i2 + 1)
+		};
+		#[cfg(debug_assertions)]
+		assert!(i2 | 1 == i2 + 1);
+		// asm self-`inc` is faster than `or` with immediate value
+		dest[i2 + 1] = h1;
 		i += 1;
 	}
 	Ok(())
@@ -99,15 +119,31 @@ pub const fn encode_slice<'i, 'o>(src: &'i [u8], dest: &'o mut [u8], c: Case) ->
 /// See [`encode_slice`] if you're not tight on memory.
 pub const fn encode_slice_in_place(s: &mut [u8], c: Case) {
 	let mut i = s.len() / 2;
+	// assert same-type
+	let _ = [i, s.len()];
 	// so this is how we write `rev` `for`-loops
 	// as `const`? huh, interesting...
 	while let Some(j) = i.checked_sub(1) {
 		i = j;
-		// never overflow
-		let i2 = i + i;
+		// SAFETY: `i` is always less than half another `usize`,
+		// therefore `i * 2` cannot overflow
+		#[cfg(not(debug_assertions))]
+		let i2 = unsafe { i.unchecked_add(i) };
+		#[cfg(debug_assertions)]
+		let Some(i2) = i.checked_add(i) else {
+			unreachable!()
+		};
 		let [h0, h1] = from_byte(s[i], c);
 		s[i2] = h0;
-		s[i2 | 1] = h1;
+		// SAFETY: `i2` is even, so `i2 | 1 == i2 + 1`
+		#[cfg(not(debug_assertions))]
+		unsafe {
+			assert_unchecked(i2 | 1 == i2 + 1)
+		};
+		#[cfg(debug_assertions)]
+		assert!(i2 | 1 == i2 + 1);
+		// asm self-`inc` is faster than `or` with immediate value
+		s[i2 + 1] = h1;
 	}
 }
 
@@ -145,10 +181,26 @@ pub const fn decode_slice<'i, 'o>(src: &'i [u8], dest: &'o mut [u8]) -> Result<(
 	}
 	let len = src.len() / 2;
 	let mut i = 0;
+	// assert same-type
+	let _ = [i, src.len(), dest.len()];
 	while i < len {
-		// never overflow
-		let i2 = i + i;
-		match from_hex([src[i2], src[i2 | 1]]) {
+		// SAFETY: `i` is always less than half another `usize`,
+		// therefore `i * 2` cannot overflow
+		#[cfg(not(debug_assertions))]
+		let i2 = unsafe { i.unchecked_add(i) };
+		#[cfg(debug_assertions)]
+		let Some(i2) = i.checked_add(i) else {
+			unreachable!()
+		};
+		// SAFETY: `i2` is even, so `i2 | 1 == i2 + 1`
+		#[cfg(not(debug_assertions))]
+		unsafe {
+			assert_unchecked(i2 | 1 == i2 + 1)
+		};
+		#[cfg(debug_assertions)]
+		assert!(i2 | 1 == i2 + 1);
+		// asm self-`inc` is faster than `or` with immediate value
+		match from_hex([src[i2], src[i2 + 1]]) {
 			Ok(b) => dest[i] = b,
 			_ => return Err(DecodeHexError::NotNibble),
 		}
@@ -171,10 +223,26 @@ pub const fn decode_slice_in_place(s: &mut [u8]) -> Result<(), DecodeHexError> {
 	}
 	let len = s.len() / 2;
 	let mut i = 0;
+	// assert same-type
+	let _ = [i, s.len()];
 	while i < len {
-		// never overflow
-		let i2 = i + i;
-		match from_hex([s[i2], s[i2 | 1]]) {
+		// SAFETY: `i` is always less than half another `usize`,
+		// therefore `i * 2` cannot overflow
+		#[cfg(not(debug_assertions))]
+		let i2 = unsafe { i.unchecked_add(i) };
+		#[cfg(debug_assertions)]
+		let Some(i2) = i.checked_add(i) else {
+			unreachable!()
+		};
+		// SAFETY: `i2` is even, so `i2 | 1 == i2 + 1`
+		#[cfg(not(debug_assertions))]
+		unsafe {
+			assert_unchecked(i2 | 1 == i2 + 1)
+		};
+		#[cfg(debug_assertions)]
+		assert!(i2 | 1 == i2 + 1);
+		// asm self-`inc` is faster than `or` with immediate value
+		match from_hex([s[i2], s[i2 + 1]]) {
 			Ok(b) => s[i] = b,
 			_ => return Err(DecodeHexError::NotNibble),
 		}
